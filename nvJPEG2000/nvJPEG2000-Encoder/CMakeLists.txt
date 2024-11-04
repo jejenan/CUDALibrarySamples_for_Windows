@@ -52,3 +52,6 @@ endif()
 
 target_link_libraries(nvjpeg2k_encode PUBLIC ${NVJPEG2K_LIB} CUDA::cudart ${FILESYS})
 
+
+file(COPY ${NVJPEG2K_PATH}/lib/${CUDAToolkit_VERSION_MAJOR}/nvjpeg2k_0.dll
+    DESTINATION ${CMAKE_BINARY_DIR})

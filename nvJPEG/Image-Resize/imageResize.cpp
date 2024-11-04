@@ -29,7 +29,7 @@
 
 #include "imageResize.h"
 
-//#define OPTIMIZED_HUFFMAN
+#define OPTIMIZED_HUFFMAN
 //#define CUDA10U2
 
 // *****************************************************************************
@@ -46,6 +46,9 @@ nvjpegEncoderState_t nvjpeg_encoder_state;
 #ifdef CUDA10U2 // This part needs CUDA 10.1 Update 2 for copy the metadata other information from base image.
 nvjpegJpegEncoding_t nvjpeg_encoding;
 #endif
+
+
+#define USE_PINNED_MEMORY 1
 
 
 // *****************************************************************************
@@ -144,13 +147,31 @@ int decodeResizeEncodeOneImage(std::string sImagePath, std::string sOutputPath, 
             pitchResize = 3 * resizeWidth;
         }
 
+        // host arrays
+        float* h_aPinned, * h_bPinned;
+
+
+        // allocate and initialize
+
+#ifdef USE_PINNED_MEMORY
+        cudaError_t eCopy = cudaMallocHost(&pBuffer, pitchDesc * heights[0]); // host pinned
+#else
         cudaError_t eCopy = cudaMalloc(&pBuffer, pitchDesc * heights[0]);
+#endif
+
         if (cudaSuccess != eCopy)
         {
             std::cerr << "cudaMalloc failed : " << cudaGetErrorString(eCopy) << std::endl;
             return EXIT_FAILURE;
         }
+
+
+#ifdef USE_PINNED_MEMORY
+        cudaError_t eCopy1 = cudaMallocHost(&pResizeBuffer, pitchResize * resizeHeight); // host pinned
+#else
         cudaError_t eCopy1 = cudaMalloc(&pResizeBuffer, pitchResize * resizeHeight);
+#endif
+
         if (cudaSuccess != eCopy1)
         {
             std::cerr << "cudaMalloc failed : " << cudaGetErrorString(eCopy) << std::endl;
@@ -168,7 +189,7 @@ int decodeResizeEncodeOneImage(std::string sImagePath, std::string sOutputPath, 
         imgResize.channel[0] = pResizeBuffer;
         imgResize.channel[1] = pResizeBuffer + resizeWidth * resizeHeight;
         imgResize.channel[2] = pResizeBuffer + resizeWidth * resizeHeight * 2;
-        imgResize.pitch[0] = (unsigned int)(is_interleaved(oformat) ? resizeWidth * NVJPEG_MAX_COMPONENT : resizeWidth);;
+        imgResize.pitch[0] = (unsigned int)(is_interleaved(oformat) ? resizeWidth * NVJPEG_MAX_COMPONENT : resizeWidth);
         imgResize.pitch[1] = (unsigned int)resizeWidth;
         imgResize.pitch[2] = (unsigned int)resizeWidth;
 
@@ -236,7 +257,21 @@ int decodeResizeEncodeOneImage(std::string sImagePath, std::string sOutputPath, 
         CHECK_NVJPEG(nvjpegEncoderParamsCopyHuffmanTables(nvjpeg_encoder_state, nvjpeg_encode_params, nvjpeg_jpeg_stream, NULL));
         CHECK_NVJPEG(nvjpegEncoderParamsCopyMetadata(nvjpeg_encoder_state, nvjpeg_encode_params, nvjpeg_jpeg_stream, NULL));
 #endif
-
+        /* Tricky part
+    *  (target_width, target_height) real case, which is 25659 * 15781
+    *  (25000, 15000) is close to my real image dimension, and it would output extraordinarily long length
+    *  (15000, 15000) is for comparison, works fine and reasonable
+    *  (10000, 10000) Also, works fine and reasonable.
+    */
+        size_t max_stream_length = 0;
+        CHECK_NVJPEG(nvjpegEncodeGetBufferSize(nvjpeg_handle, nvjpeg_encode_params, dstSize.width, dstSize.height, &max_stream_length));
+        printf("   Max stream length estimated: %zu\n", max_stream_length);
+        CHECK_NVJPEG(nvjpegEncodeGetBufferSize(nvjpeg_handle, nvjpeg_encode_params, 36000, 10000, &max_stream_length));
+        printf("   Max stream length estimated: %zu\n", max_stream_length);
+        //CHECK_NVJPEG(nvjpegEncodeGetBufferSize(nvjpeg_handle, nvjpeg_encode_params, 15000, 15000, &max_stream_length));
+        //printf("   Max stream length estimated: %zu\n", max_stream_length);
+        //CHECK_NVJPEG(nvjpegEncodeGetBufferSize(nvjpeg_handle, nvjpeg_encode_params, 10000, 10000, &max_stream_length));
+        //printf("   Max stream length estimated: %zu\n", max_stream_length);
         // encoding the resize data
         CHECK_NVJPEG(nvjpegEncodeImage(nvjpeg_handle,
             nvjpeg_encoder_state,
@@ -292,9 +327,13 @@ int decodeResizeEncodeOneImage(std::string sImagePath, std::string sOutputPath, 
         outputFile.write(reinterpret_cast<const char *>(obuffer.data()), static_cast<int>(length));
     }
     // Free memory
+#ifdef USE_PINNED_MEMORY
+    CHECK_CUDA(cudaFreeHost(pBuffer));
+    CHECK_CUDA(cudaFreeHost(pResizeBuffer));
+#else
     CHECK_CUDA(cudaFree(pBuffer));
     CHECK_CUDA(cudaFree(pResizeBuffer));
-
+#endif
     // get timing
     CHECK_CUDA(cudaEventElapsedTime(&resize_time, start, stop));
     time = (double)resize_time;

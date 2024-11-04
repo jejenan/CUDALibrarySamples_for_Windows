@@ -579,7 +579,7 @@ int main(int argc, char **argv) {
 					CHECK_CUDA(cudaMalloc(&stripData_d, sizeof(*stripData_d)*totStrips*encStripAllocSize));
 					ctx = nvTiffEncodeCtxCreate(devId, nSubFiles, nStripOut);
 				} else {
-					printf("error, while finalizing compressed images!\n");
+					printf("error %d, while finalizing compressed images!\n", rv);
 					exit(EXIT_FAILURE);
 				}
 			}

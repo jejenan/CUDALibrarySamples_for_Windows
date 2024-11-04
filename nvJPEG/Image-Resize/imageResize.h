@@ -38,7 +38,7 @@
 #include <sys/time.h>  // timings
 #include <unistd.h>
 #endif
-#include <dirent.h>  
+#include "dirent.h"  
 #include <sys/stat.h>
 #include <sys/types.h>
 

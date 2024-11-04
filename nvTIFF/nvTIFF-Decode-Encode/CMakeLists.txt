@@ -17,7 +17,7 @@ find_package(CUDAToolkit REQUIRED)
 
 find_library(NVTIFF_LIB
      NAMES nvtiff
-     PATHS ${NVTIFF_PATH}/lib64/${CUDAToolkit_VERSION_MAJOR}
+     PATHS ${NVTIFF_PATH}/lib/${CUDAToolkit_VERSION_MAJOR}
            ${NVTIFF_PATH}/lib)
 
 
@@ -54,3 +54,5 @@ endif()
 
 target_link_libraries(nvTiff_example PUBLIC ${NVTIFF_LIB} CUDA::cudart)
 
+file(COPY ${NVTIFF_PATH}/lib/${CUDAToolkit_VERSION_MAJOR}/nvtiff_0.dll
+    DESTINATION ${CMAKE_BINARY_DIR})
