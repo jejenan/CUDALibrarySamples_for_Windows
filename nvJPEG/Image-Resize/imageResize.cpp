@@ -49,7 +49,8 @@ nvjpegJpegEncoding_t nvjpeg_encoding;
 
 
 #define USE_PINNED_MEMORY 1
-
+#include <chrono>
+using perfclock = std::chrono::high_resolution_clock;
 
 // *****************************************************************************
 // Decode, Resize and Encoder function
@@ -273,6 +274,8 @@ int decodeResizeEncodeOneImage(std::string sImagePath, std::string sOutputPath, 
         //CHECK_NVJPEG(nvjpegEncodeGetBufferSize(nvjpeg_handle, nvjpeg_encode_params, 10000, 10000, &max_stream_length));
         //printf("   Max stream length estimated: %zu\n", max_stream_length);
         // encoding the resize data
+
+        auto enc_start = perfclock::now();
         CHECK_NVJPEG(nvjpegEncodeImage(nvjpeg_handle,
             nvjpeg_encoder_state,
             nvjpeg_encode_params,
@@ -281,6 +284,11 @@ int decodeResizeEncodeOneImage(std::string sImagePath, std::string sOutputPath, 
             dstSize.width,
             dstSize.height,
             NULL));
+
+        auto enc_end = perfclock::now();
+        double enc_time = std::chrono::duration<float>(enc_end - enc_start).count();
+
+        std::cout << "encoding time: " << enc_time << std::endl;
 
         // retrive the encoded bitstream for file writing
         std::vector<unsigned char> obuffer;
@@ -414,9 +422,9 @@ int main(int argc, const char *argv[])
 
     params.input_dir = "./";
     if ((pidx = findParamIndex(argv, argc, "-i")) != -1) {
-    params.input_dir = argv[pidx + 1];
+        params.input_dir = argv[pidx + 1];
     } else {
-    // Search in default paths for input images.
+        // Search in default paths for input images.
     int found = getInputDir(params.input_dir, argv[0]);
     if (!found)
     {
@@ -425,7 +433,7 @@ int main(int argc, const char *argv[])
     }
     }
     if ((pidx = findParamIndex(argv, argc, "-o")) != -1) {
-    params.output_dir = argv[pidx + 1];
+        params.output_dir = argv[pidx + 1];
     } else {
       // by-default write the folder named "output" in cwd
       params.output_dir = "resize_output";
